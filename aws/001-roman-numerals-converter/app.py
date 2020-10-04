@@ -32,3 +32,4 @@ def main_post():
 
 if __name__ == '__main__':
     app.run(debug=True)
+    #app.run('0.0.0.0/0', host = 80)
