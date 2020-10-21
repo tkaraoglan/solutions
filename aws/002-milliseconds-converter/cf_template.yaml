@@ -18,10 +18,13 @@ Resources:
     Properties:
       GroupDescription: Enable Http for app from alb  #required
       SecurityGroupIngress:
-        - IpProtocol: TCP
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: 0.0.0.0/0
           SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
 
   WebServerLaunchTemplate:
@@ -45,15 +48,68 @@ Resources:
               yum update -y
               yum install python3 -y
               pip3 install flask
-              TOKEN="0c72f410b7f91679962122dbb1730a46bc08a5e6"
-              FOLDER="XXXXXXXXXXXXXXXX"
+              TOKEN="66d04bff1735390c524b4456c8821d95bb4d1929"
+              FOLDER="https://$TOKEN@raw.githubusercontent.com/tkaraoglan/solutions/main/aws/002-milliseconds-converter/"
               curl -s --create-dirs -o "/home/ec2-user/templates/index.html" -L "$FOLDER"templates/index.html
               curl -s --create-dirs -o "/home/ec2-user/templates/result.html" -L "$FOLDER"templates/result.html
               curl -s --create-dirs -o "/home/ec2-user/app.py" -L "$FOLDER"app.py
               python3 /home/ec2-user/app.py
 
           
+  WebServerTargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      VpcId: !GetAtt WebServerSecurityGroup.VpcId
   
+  ApplicationLoadBalancer:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      IpAddressType: ipv4
+      Scheme: internet-facing
+      SecurityGroups:
+        - !GetAtt ALBSecurityGroup.GroupId
+      Subnets:
+        - subnet-4893e305
+        - subnet-db58c2d5
+        - subnet-cc55faed
+        - subnet-e66a9ed7
+        - subnet-45c66623
+        - subnet-7f61cc20
+      Type: application
+
+  ALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions: #required
+        - TargetGroupArn: !Ref WebServerTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref ApplicationLoadBalancer #required
+      Port: 80 #required
+      Protocol: HTTP #required
+  WebServerAutoScalingGroup:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    Properties:
+      AvailabilityZones:
+        !GetAZs ""
+      DesiredCapacity: 2
+      HealthCheckGracePeriod: 90
+      HealthCheckType: ELB
+      LaunchTemplate: 
+        LaunchTemplateId: !Ref WebServerLaunchTemplate
+        Version: !GetAtt WebServerLaunchTemplate.LatestVersionNumber
+      MaxSize: 3 #required
+      MinSize: 1 #required
+      TargetGroupARNs:
+        - !Ref WebServerTargetGroup
 
   
+  
 Outputs:
+  WebsiteURL:
+    Description: Milliseconds Converter Application Load Balancer URL
+    Value: !Sub 
+      - http://${ALBaddress}
+      - ALBaddress: !GetAtt ApplicationLoadBalancer.DNSName
